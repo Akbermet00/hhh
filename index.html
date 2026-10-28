@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><title>Умный гардероб</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#faf8f5;--fg:#222;--card:#fff;--ac:#7a4cff;--mu:#777;--bd:#e5e0d8;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#17161a;--fg:#eee;--card:#222127;--mu:#a09ca8;--bd:#37343d}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px system-ui,sans-serif}
+main{max-width:760px;margin:auto;padding:16px}h1{font-size:22px;margin:4px 0 12px}
+nav{display:flex;gap:8px;margin-bottom:14px}nav button{flex:1}
+button,input,select{font:inherit;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--fg)}
+button.on,button.p{background:var(--ac);color:#fff;border-color:var(--ac)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:8px}
+.c img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px}.m{color:var(--mu);font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.row>*{flex:1;min-width:120px}
+a{color:var(--ac);margin-right:10px}.hide{display:none}
+</style></head><body><main>
+<h1>👗 Умный гардероб <span class="m" id="mode"></span></h1>
+<nav><button data-t="w" class="on">Гардероб</button><button data-t="o">Образы</button><button data-t="t">Тренды</button></nav>
+
+<section id="w">
+ <div class="row">
+  <input type="file" id="file" accept="image/*" capture="environment">
+  <input id="name" placeholder="Название (футболка)">
+  <select id="cat"><option value="top">Верх</option><option value="bottom">Низ</option><option value="shoes">Обувь</option><option value="outer">Верхняя одежда</option></select>
+  <select id="col"><option>чёрный</option><option>белый</option><option>серый</option><option>бежевый</option><option>синий</option><option>красный</option><option>зелёный</option><option>другой</option></select>
+  <button class="p" id="add">Сохранить</button>
+ </div><div class="grid" id="list"></div>
+</section>
+
+<section id="o" class="hide"><button class="p" id="gen">Подобрать образ</button><div class="grid" id="out" style="margin-top:12px"></div></section>
+
+<section id="t" class="hide">
+ <div class="row"><input id="q" placeholder="Поиск трендов: джинсы, кроссовки…"><button class="p" id="go">Найти</button></div><div id="tr"></div>
+</section>
+
+<script>
+const $=s=>document.querySelector(s);let items=[],api=false;
+const TR=[["Оверсайз пиджак","пиджак офис оверсайз"],["Карго брюки","карго брюки стритвир"],["Широкие джинсы","джинсы деним широкие"],["Кожаная куртка","куртка кожа верхняя"],["Лоферы","обувь лоферы"],["Массивные кроссовки","обувь кроссовки"],["Трикотажный кардиган","кардиган вязаный"],["Тренч","тренч верхняя"],["Миди-юбка","юбка миди"],["Худи оверсайз","худи оверсайз"]];
+const shops=q=>[["Lamoda","https://www.lamoda.ru/catalogsearch/result/?q="],["Wildberries","https://www.wildberries.ru/catalog/0/search.aspx?search="],["Ozon","https://www.ozon.ru/search/?text="],["Google Shopping","https://www.google.com/search?tbm=shop&q="]].map(([shop,u])=>({shop,url:u+encodeURIComponent(q)}));
+const ls={get(){try{return JSON.parse(localStorage.getItem('wd')||'[]')}catch(e){return[]}},set(v){try{localStorage.setItem('wd',JSON.stringify(v));return true}catch(e){alert('Память браузера заполнена');return false}}};
+async function load(){try{const r=await fetch('/api/health');api=r.ok&&(await r.json()).ok}catch(e){api=false}
+ $('#mode').textContent=api?'· сервер':'· демо (в браузере)';items=api?await(await fetch('/api/items')).json():ls.get();draw()}
+function draw(){$('#list').innerHTML=items.map(i=>`<div class="c"><img src="${i.photo}" alt=""><b>${esc(i.name||'Без названия')}</b><div class="m">${i.category} · ${esc(i.color)}</div><button onclick="del('${i.id}')">Удалить</button></div>`).join('')||'<p class="m">Пока пусто — сфотографируйте первую вещь.</p>'}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function shrink(f){return new Promise(ok=>{const im=new Image();im.onload=()=>{const s=Math.min(1,500/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*s;c.height=im.height*s;c.getContext('2d').drawImage(im,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.6))};im.src=URL.createObjectURL(f)})}
+$('#add').onclick=async()=>{const f=$('#file').files[0];if(!f)return alert('Сначала выберите фото');
+ const it={name:$('#name').value,category:$('#cat').value,color:$('#col').value,photo:await shrink(f)};
+ if(api){const r=await(await fetch('/api/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(it)})).json();items.unshift(r)}
+ else{it.id=Date.now();const n=[it,...items];if(!ls.set(n))return;items=n}
+ $('#file').value='';$('#name').value='';draw()};
+async function del(id){if(api)await fetch('/api/items/'+id,{method:'DELETE'});items=items.filter(i=>String(i.id)!==String(id));if(!api)ls.set(items);draw()}
+const NEU=['чёрный','белый','серый','бежевый','синий'];
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+$('#gen').onclick=()=>{const g=c=>items.filter(i=>i.category===c);if(!g('top').length||!g('bottom').length){$('#out').innerHTML='<p class="m">Добавьте минимум одну вещь «Верх» и «Низ».</p>';return}
+ const top=pick(g('top'));let bots=g('bottom').filter(b=>b.color!==top.color&&(NEU.includes(b.color)||NEU.includes(top.color)));if(!bots.length)bots=g('bottom');
+ const set=[top,pick(bots)];['shoes','outer'].forEach(c=>g(c).length&&set.push(pick(g(c))));
+ $('#out').innerHTML=set.map(i=>`<div class="c"><img src="${i.photo}" alt=""><b>${esc(i.name||i.category)}</b><div class="m">${esc(i.color)}</div></div>`).join('')};
+async function trends(q){q=q.toLowerCase().trim();let r;
+ if(api)r=await(await fetch('/api/trends?q='+encodeURIComponent(q))).json();
+ else{r=TR.filter(([n,t])=>!q||(n+' '+t).toLowerCase().includes(q)).map(([n,t])=>({name:n,tags:t.split(' '),buy:shops(n)}));if(q&&!r.length)r=[{name:q,tags:[],buy:shops(q)}]}
+ $('#tr').innerHTML=r.map(t=>`<div class="c" style="margin-bottom:8px"><b>${esc(t.name)}</b><div class="m">${t.tags.map(esc).join(' · ')}</div><div style="margin-top:6px">${t.buy.map(b=>`<a href="${b.url}" target="_blank" rel="noopener">${b.shop}</a>`).join('')}</div></div>`).join('')}
+$('#go').onclick=()=>trends($('#q').value);$('#q').onkeydown=e=>e.key==='Enter'&&trends($('#q').value);
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['w','o','t'].forEach(s=>$('#'+s).classList.toggle('hide',s!==b.dataset.t));if(b.dataset.t==='t')trends('')});
+load();
+</script></main></body></html>
